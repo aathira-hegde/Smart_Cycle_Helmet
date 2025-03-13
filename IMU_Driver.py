@@ -2,6 +2,7 @@ import machine
 from machine import Pin, I2C
 from time import sleep
 import time
+import struct
 
 LSM6DSOX_ADDR = 0x6A 
 WHO_AM_I_REG = 0x0F
@@ -42,13 +43,14 @@ def read_fifo_status():
     fifo_full = (status2 & 0x20) != 0
     return fifo_level, fifo_full
 
-def read_fifo_data(samples):
+def read_fifo_data(FIFO_Size):
     data = []
-    for _ in range(samples):
-        lsb = i2c.readfrom_mem(LSM6DSOX_ADDR, FIFO_DATA_OUT_L, 1)[0]
-        msb = i2c.readfrom_mem(LSM6DSOX_ADDR, FIFO_DATA_OUT_H, 1)[0]
-        value = (msb << 8) | lsb  # Convert to 16-bit value
-        data.append(value)
+    while(FIFO_Size>0):
+        raw_data = read_register(FIFO_DATA_OUT_H, 12)
+        ax, ay, az, gx, gy, gz = struct.unpack('<hhhhhh', raw_data)
+        print(f"Accel: {ax}, {ay}, {az} | Gyro: {gx}, {gy}, {gz}")
+        data.append(raw_data)
+        FIFO_Size = FIFO_Size - 1
     return data
 
 
@@ -104,11 +106,13 @@ write_register(CTRL2_G , 0b00101100)
 while(1):
     fifo_level, fifo_full = read_fifo_status()
     print("fifo_level=" + str(fifo_level))
-    AXL_Data = read_register(OUTX_AXL,6)
-    AXL_X = bytes_to_int16(AXL_Data[1], AXL_Data[0])
-    AXL_Y = bytes_to_int16(AXL_Data[3],AXL_Data[2])
-    AXL_Z = bytes_to_int16(AXL_Data[5], AXL_Data[4])
-    print("AXL data = ", AXL_X,AXL_Y,AXL_Z )
+    if(fifo_level>0):
+        read_fifo_data(fifo_level)
+        AXL_Data = read_register(OUTX_AXL,6)
+        AXL_X = bytes_to_int16(AXL_Data[1], AXL_Data[0])
+        AXL_Y = bytes_to_int16(AXL_Data[3],AXL_Data[2])
+        AXL_Z = bytes_to_int16(AXL_Data[5], AXL_Data[4])
+        print("AXL data = ", AXL_X,AXL_Y,AXL_Z )
     sleep(1)
 
 
