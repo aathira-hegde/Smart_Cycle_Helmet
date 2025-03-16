@@ -4,7 +4,7 @@ from micropython import const
 # SCL is Pin 20, SDA is Pin 22
 a = []
 read_timer = Timer(0)
-i = 0
+x = 0
 # Define register addresses
 
 LSM6DSOX_I2C_ADDR 		= 	const(0x6A)
@@ -56,6 +56,8 @@ int2_cfg		= 	const(0b10010000)
 class Adafruit_LSM6DSOX:
     def __init__(self, pin_scl, pin_sda, freq):
         self.device = I2C(1, scl = pin_scl, sda = pin_sda, freq = freq)
+#         self.int1 = Pin(7)
+#         self.int2 = Pin(8)
     
     def _scan_(self):
         return self.device.scan()
@@ -103,17 +105,17 @@ class Adafruit_LSM6DSOX:
         while self._read_8(LSM6DSOX_WHO_AM_I) != 0x6c:
             return False
         self._load_settings_()
-        self.interrupt_en()
+#         self.interrupt_en()
         return True
         
-    def interrupt_en(self):
-        int1.irq(trigger=Pin.IRQ_RISING, handler=read_data())
+#     def interrupt_en(self):
+#         self.int1.irq(trigger=Pin.IRQ_FALLING, handler=self.read_data)
 #         int2.irq(trigger=Pin. IRQ_RISING, handler=read_data)
         
         
-def read_data():
-    print (f'Reading data due to {int1.value()} and {int2.value()}')
-    global i;
+def read_data(t):
+    global x
+    print (f'Reading data at timer interrupt')
     i = 0
     y = p._read_16(LSM6DSOX_FIFO_STATUS1)
     x = int(y & 0x03FF)
@@ -131,12 +133,17 @@ def read_data():
         
 
 p = Adafruit_LSM6DSOX(Pin(20), Pin(22), freq = 100000)
-# Int1 at RX, Int2 at TX
-int1 = Pin(7)
-int2 = Pin(8)
 print(p.begin())
+read_timer.init(mode = Timer.PERIODIC, period = 10000, callback = read_data)
 
 
+
+    
+    
+    
+
+
+    
     
 
 
