@@ -48,7 +48,7 @@ def read_fifo_data(FIFO_Size):
     while(FIFO_Size>0):
         raw_data = read_register(FIFO_DATA_OUT_H, 12)
         ax, ay, az, gx, gy, gz = struct.unpack('<hhhhhh', raw_data)
-        print(f"Accel: {ax}, {ay}, {az} | Gyro: {gx}, {gy}, {gz}")
+        #print(f"Accel: {ax}, {ay}, {az} | Gyro: {gx}, {gy}, {gz}")
         data.append(raw_data)
         FIFO_Size = FIFO_Size - 1
     return data
@@ -88,32 +88,36 @@ if(len(device_id)>0):
 else:
     print("Failed to communicate with LSM6DSOX. Check connections.")
 
-
+INT1 = Pin(13, Pin.IN)
 write_register(WAKE_UP_THS, 0x02)
 write_register(WAKE_UP_DUR, 0x02)
 write_register(CTRL3_C, 0x04)
 write_register(MD1_CFG, 0b00000010)
 write_register(FIFO_CTRL4,0x06)
 
-#write_register(FIFO_CTRL1, 26 & 0xFF)
-#write_register(FIFO_CTRL2, (26 >> 8) & 0x0F )
+
+write_register(FIFO_CTRL1, 54)
+write_register(FIFO_CTRL2, 0b00000000)
+write_register(INT1_CTRL, 0b00001000)
 write_register(FIFO_CTRL3, 0x22)
-write_register(INT1_CTRL, 0b00000111)
+
 write_register(FREE_FALL, 0b00001100)
 write_register(CTRL1_XL, 0b00100100)
 write_register(CTRL2_G , 0b00101100)
 
+ACCEL_SENSITIVITY = 0.000488 *9.81  # g/LSB for ±16g
 while(1):
-    fifo_level, fifo_full = read_fifo_status()
-    print("fifo_level=" + str(fifo_level))
-    if(fifo_level>0):
-        read_fifo_data(fifo_level)
-        AXL_Data = read_register(OUTX_AXL,6)
-        AXL_X = bytes_to_int16(AXL_Data[1], AXL_Data[0])
-        AXL_Y = bytes_to_int16(AXL_Data[3],AXL_Data[2])
-        AXL_Z = bytes_to_int16(AXL_Data[5], AXL_Data[4])
-        print("AXL data = ", AXL_X,AXL_Y,AXL_Z )
-    sleep(1)
+    if(INT1.value()==1):
+        fifo_level, fifo_full = read_fifo_status()
+        print("fifo_level=" + str(fifo_level))
+        if(fifo_level>0):
+            read_fifo_data(fifo_level)
+            #AXL_Data = read_register(OUTX_AXL,6)
+            #AXL_X = bytes_to_int16(AXL_Data[1], AXL_Data[0])
+            #AXL_Y = bytes_to_int16(AXL_Data[3],AXL_Data[2])
+            #AXL_Z = bytes_to_int16(AXL_Data[5], AXL_Data[4])
+            #print("AXL data = ", AXL_X * ACCEL_SENSITIVITY,AXL_Y * ACCEL_SENSITIVITY,AXL_Z  * ACCEL_SENSITIVITY)
+    #sleep(5.2)
 
 
 
