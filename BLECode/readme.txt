@@ -14,7 +14,7 @@ To update: data = struct.pack('156h', *simulate_payload), change 156h however ma
 
 -------------------------------------------------------------------------
 
-file: BleMultiDevice.py
+file: BleWindows.py
 Usage: RUN ON WINDOWS COMPUTER
 
 Function:  send_data
