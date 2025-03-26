@@ -3,7 +3,7 @@ import time
 import math
 
 # I2C Initialization - USE THE CORRECT ADDRESS!
-i2c = I2C(1, scl=Pin(21), sda=Pin(22))  # Example: ESP32 pins
+i2c = I2C(1, scl=Pin(20), sda=Pin(22))  # Example: ESP32 pins
 lsm6dsox_address = 0x6A  # CHANGE THIS if necessary
 
 # LSM6DSOX Register Addresses
