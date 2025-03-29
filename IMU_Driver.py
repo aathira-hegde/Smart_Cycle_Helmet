@@ -4,6 +4,15 @@ from time import sleep
 import time
 import struct
 
+EMB_FUNC_EN_A = 0x04
+EMB_FUNC_INT2 = 0x0E
+MD2_CFG = 0x5F
+PAGE_RW = 0x17
+TAP_CFG = 0x58
+FUNC_CFG_ACCESS = 0x01
+EMB_FUNC_STATUS_MAINPAGE = 0x35
+
+EMB_FUNC_INIT_A = 0x66
 LSM6DSOX_ADDR = 0x6A 
 WHO_AM_I_REG = 0x0F
 WAKE_UP_THS  = 0x5B
@@ -89,19 +98,29 @@ else:
     print("Failed to communicate with LSM6DSOX. Check connections.")
 
 INT1 = Pin(13, Pin.IN)
+INT2 = Pin(12, Pin.IN)
 write_register(WAKE_UP_THS, 0x02)
 write_register(WAKE_UP_DUR, 0x02)
 write_register(CTRL3_C, 0x04)
-write_register(MD1_CFG, 0b00000010)
+
 write_register(FIFO_CTRL4,0x06)
 
+#write_register(FUNC_CFG_ACCESS,0x80)
+
+
+write_register(EMB_FUNC_EN_A,0b00100000)
+write_register(PAGE_RW,0b10000000)
+write_register(EMB_FUNC_INIT_A,0b00100000)
+write_register(EMB_FUNC_INT2,0b00100000)
+write_register(MD2_CFG, 0b00000010)
+write_register(TAP_CFG,0x80)
 
 write_register(FIFO_CTRL1, 54)
 write_register(FIFO_CTRL2, 0b00000000)
 write_register(INT1_CTRL, 0b00001000)
 write_register(FIFO_CTRL3, 0x22)
 
-write_register(FREE_FALL, 0b00001100)
+#write_register(FREE_FALL, 0b00001100)
 write_register(CTRL1_XL, 0b00100100)
 write_register(CTRL2_G , 0b00101100)
 
@@ -110,6 +129,8 @@ while(1):
     if(INT1.value()==1):
         fifo_level, fifo_full = read_fifo_status()
         print("fifo_level=" + str(fifo_level))
+        #embd_func = read_register(EMB_FUNC_STATUS_MAINPAGE,1)
+        #print("embd_func:", str(embd_func))
         if(fifo_level>0):
             read_fifo_data(fifo_level)
             #AXL_Data = read_register(OUTX_AXL,6)
@@ -117,6 +138,12 @@ while(1):
             #AXL_Y = bytes_to_int16(AXL_Data[3],AXL_Data[2])
             #AXL_Z = bytes_to_int16(AXL_Data[5], AXL_Data[4])
             #print("AXL data = ", AXL_X * ACCEL_SENSITIVITY,AXL_Y * ACCEL_SENSITIVITY,AXL_Z  * ACCEL_SENSITIVITY)
+    if(INT2.value()==1):
+        read_register(0x36,1)
+        read_register(0x37,1)
+        print("significant motion detection")
+        sleep(0.5)
+        
     #sleep(5.2)
 
 
