@@ -1,234 +1,168 @@
+##This Code is still a work in progress, output is not perfect.
+
+##Currently the code detects the IMU device and scans for motion. 
+##If no motion is detected for 30 seconds after running the code the microcontroller will go into an idle mode where it will scan every 10 seconds, if motion is detected within the 10 second time frame the microcontroller will go back into an "awake mode" and scan every second until there is no motion for 30 seconds.
+
+import machine
 from machine import Pin, I2C
+from time import sleep
 import time
-import math
+import struct
 
-# I2C Initialization - USE THE CORRECT ADDRESS!
-i2c = I2C(1, scl=Pin(20), sda=Pin(22))  # Example: ESP32 pins
-lsm6dsox_address = 0x6A  # CHANGE THIS if necessary
-
-# LSM6DSOX Register Addresses
+LSM6DSOX_ADDR = 0x6A
+WHO_AM_I_REG = 0x0F
+WAKE_UP_THS = 0x5B
+WAKE_UP_DUR = 0x5C
+MD1_CFG = 0x5E
+FIFO_CTRL1 = 0x07
+FIFO_CTRL2 = 0x08
+FIFO_CTRL3 = 0x09
+FIFO_CTRL4 = 0x0A
+INT1_CTRL = 0x0D
+FREE_FALL = 0x5D
 CTRL1_XL = 0x10
 CTRL2_G = 0x11
 CTRL3_C = 0x12
-FIFO_CTRL1 = 0x06
-FIFO_CTRL2 = 0x07
-FIFO_CTRL5 = 0x0A
+FIFO_STATUS1 = 0x3A
 FIFO_STATUS2 = 0x3B
-OUTX_L_G = 0x22
-OUTX_L_XL = 0x28
+FIFO_DATA_OUT_L = 0x78
+FIFO_DATA_OUT_H = 0x79
+OUTX_AXL = 0x28
 
-# Global variables
-gyro_bias_x = 0.0
-gyro_bias_y = 0.0
-gyro_bias_z = 0.0
+# Power cycle the I2C device
+NEOI2C_PWR = Pin(2, Pin.OUT)
+NEOI2C_PWR.value(0)
+sleep(0.5)
+NEOI2C_PWR.value(1)
+i2c = I2C(0, scl=Pin(20), sda=Pin(22), freq=400000)
 
-# --- Helper Functions ---
-
-def read_register(address, register):
-    """Reads a byte from a register."""
-    i2c.writeto(address, bytes([register]))
-    return i2c.readfrom(address, 1)[0]
-
-def read_registers(address, register, num_bytes):
-    """Reads multiple bytes from a register."""
-    i2c.writeto(address, bytes([register]))
-    return i2c.readfrom(address, num_bytes)
-
-def write_register(address, register, value):
-    """Writes a byte to a register."""
-    i2c.writeto_mem(address, register, bytes([value]))
-
-def standard_deviation(data):  # Keep this for calibration
-    """Calculates the standard deviation of a list of numbers."""
-    n = len(data)
-    if n < 2:
-        return 0.0
-    mean = sum(data) / n
-    variance = sum((x - mean) ** 2 for x in data) / (n - 1)
-    return variance ** 0.5
-
-# --- Sensor Functions ---
-
-def get_accel_data():
-    """Reads and scales accelerometer data."""
+def read_register(register, _count):
     try:
-        data = read_registers(lsm6dsox_address, OUTX_L_XL, 6)
-        x = (data[1] << 8) | data[0]
-        y = (data[3] << 8) | data[2]
-        z = (data[5] << 8) | data[4]
-        x = x if x < 32768 else x - 65536
-        y = y if y < 32768 else y - 65536
-        z = z if z < 32768 else z - 65536
-        scale = 0.061 / 1000  # mg/LSB at 2g range to g's
-        return x * scale, y * scale, z * scale
-    except Exception as e:
-        print("Error reading accelerometer data:", e)
-        return 0.0, 0.0, 0.0
+        return i2c.readfrom_mem(LSM6DSOX_ADDR, register, _count)
+    except OSError:
+        print(f"Failed to read from register: {hex(register)}")
+        return None
 
-def get_gyro_data():
-    """Reads and scales gyroscope data (from FIFO)."""
-    global gyro_bias_x, gyro_bias_y, gyro_bias_z
-
+def write_register(register, value):
     try:
-        data = read_registers(lsm6dsox_address, OUTX_L_G, 6)
-        x = (data[1] << 8) | data[0]
-        y = (data[3] << 8) | data[2]
-        z = (data[5] << 8) | data[4]
-        x = x if x < 32768 else x - 65536
-        y = y if y < 32768 else y - 65536
-        z = z if z < 32768 else z - 65536
-        scale = 8.75 / 1000  # mdps/LSB at 250 dps range to dps
+        i2c.writeto_mem(LSM6DSOX_ADDR, register, bytes([value]))
+        print(f"Wrote {hex(value)} to register {hex(register)}")
+    except OSError:
+        print("Failed to write to register. Check connections.")
 
-        x *= scale
-        y *= scale
-        z *= scale
+def bytes_to_int16(msb, lsb):
+    value = (msb << 8) | lsb
+    if value & 0x8000:
+        value -= 0x10000
+    return value
 
-        # --- Dynamic Offset Adjustment (Only When Still) ---
-        stillness_threshold = 1.0  #  Reduced threshold
-        dynamic_calibration_rate = 0.0001 # Reduced rate
+def read_fifo_status():
+    status1 = read_register(FIFO_STATUS1, 1)[0]
+    status2 = read_register(FIFO_STATUS2, 1)[0]
+    fifo_level = status1 | ((status2 & 0x03) << 8)  # FIFO level (10-bit)
+    fifo_full = (status2 & 0x20) != 0
+    return fifo_level, fifo_full
 
-        if abs(x) < stillness_threshold and abs(y) < stillness_threshold and abs(z) < stillness_threshold:
-            gyro_bias_x += (x - gyro_bias_x) * dynamic_calibration_rate
-            gyro_bias_y += (y - gyro_bias_y) * dynamic_calibration_rate
-            gyro_bias_z += (z - gyro_bias_z) * dynamic_calibration_rate
-        return x - gyro_bias_x, y - gyro_bias_y, z - gyro_bias_z
+def read_fifo_data(FIFO_Size):
+    data = []
+    while FIFO_Size > 0:
+        raw_data = read_register(FIFO_DATA_OUT_H, 12)
+        ax, ay, az, gx, gy, gz = struct.unpack('<hhhhhh', raw_data)
+        print(f"Accel: {ax}, {ay}, {az} | Gyro: {gx}, {gy}, {gz}")
+        data.append(raw_data)
+        FIFO_Size -= 1
+    return data
 
-    except Exception as e:
-        print("Error reading gyroscope data:", e)
-        return 0.0, 0.0, 0.0
-# --- Calibration ---
-def calibrate_gyro(num_samples=500, stable_threshold=0.5, max_retries=5):
-    """Improved gyroscope calibration with stability check and retry mechanism."""
-    global gyro_bias_x, gyro_bias_y, gyro_bias_z
-    print("Calibrating gyroscope.  Keep the sensor VERY still...")
-    retries = 0
+def enter_idle_mode():
+    print("Entering idle mode...")
+    write_register(CTRL1_XL, 0x20)  # Set accelerometer ODR to 26 Hz, 2g
+    write_register(CTRL2_G, 0x20)  # Set gyroscope ODR to 26 Hz, 2000 dps
 
-    while retries < max_retries:
-        sums = [0.0, 0.0, 0.0]  # Reset sums on each retry
-        values = [[], [], []]  # Reset values on each retry
-        for i in range(num_samples):
-            # Get raw gyro data
-            try:
-                data = read_registers(lsm6dsox_address, OUTX_L_G, 6)
-                x = (data[1] << 8) | data[0]
-                y = (data[3] << 8) | data[2]
-                z = (data[5] << 8) | data[4]
-                x = x if x < 32768 else x - 65536
-                y = y if y < 32768 else y - 65536
-                z = z if z < 32768 else z - 65536
-                scale = 8.75 / 1000
-                x *= scale
-                y *= scale
-                z *= scale
+def exit_idle_mode():
+    print("Exiting idle mode...")
+    write_register(CTRL1_XL, 0x20)  # Set accelerometer ODR to 26 Hz, 2g
+    write_register(CTRL2_G, 0x20)  # Set gyroscope ODR to 26 Hz, 2000 dps
 
-            except Exception as e:
-                print("Error during calibration read:", e)
-                # Instead of restarting immediately, count this as a retry
-                retries += 1
-                time.sleep(0.1) # Short delay
-                break  # Exit the inner loop and retry
-
-            sums[0] += x
-            sums[1] += y
-            sums[2] += z
-            values[0].append(x)
-            values[1].append(y)
-            values[2].append(z)
-
-            time.sleep(0.01)
-
-            if i > 100 and i % 50 == 0:
-                std_dev_x = standard_deviation(values[0])
-                std_dev_y = standard_deviation(values[1])
-                std_dev_z = standard_deviation(values[2])
-
-                if (std_dev_x > stable_threshold or
-                    std_dev_y > stable_threshold or
-                    std_dev_z > stable_threshold):
-                    print(f"Sensor not stable (attempt {retries + 1}/{max_retries}). Retrying...")
-                    retries += 1
-                    time.sleep(0.5)  # Wait a bit before retrying
-                    break  # Exit the inner loop and retry
-        else:  # This 'else' belongs to the 'for' loop
-            # Calibration successful (inner loop completed without breaking)
-            gyro_bias_x = sums[0] / num_samples
-            gyro_bias_y = sums[1] / num_samples
-            gyro_bias_z = sums[2] / num_samples
-            print("Calibration complete.")
-            print(f"Gyro biases: x={gyro_bias_x:.4f}, y={gyro_bias_y:.4f}, z={gyro_bias_z:.4f}")
-
-            return True  # Calibration succeeded!
-
-    print("Calibration failed after multiple retries. Check sensor and environment.")
-    # Reset biases if calibration ultimately fails
-    gyro_bias_x = 0.0
-    gyro_bias_y = 0.0
-    gyro_bias_z = 0.0
-    return False # Indicate that the calibration failed
-# --- Initialization ---
-
-def init_sensor():
-    """Initializes the sensor, including FIFO configuration."""
-    try:
-        # Set accelerometer to 416 Hz, 2g range
-        write_register(lsm6dsox_address, CTRL1_XL, 0x80)  # 416 Hz
-
-        # Set gyroscope to 416 Hz, 250 dps range
-        write_register(lsm6dsox_address, CTRL2_G, 0x80)  # 416 Hz
-
-        # Enable Block Data Update (BDU) -- IMPORTANT!
-        write_register(lsm6dsox_address, CTRL3_C, 0x44)  # BDU enabled, auto-increment
-
-        # --- FIFO Configuration ---
-
-        # FIFO Mode: Continuous (overwrites oldest data when full)
-        # Set FIFO ODR to 104 Hz (a decimation factor of 4 from 416 Hz)
-        # Store *only* gyroscope data in the FIFO.
-        write_register(lsm6dsox_address, FIFO_CTRL5, 0b01101000) # 0b011(ODR 104Hz)010(Gyro Only)00
-		# FIFO threshold - set to 1 (read as soon as data is available)
-        write_register(lsm6dsox_address, FIFO_CTRL1, 1)
-        write_register(lsm6dsox_address, FIFO_CTRL2, 0x00)
-
-        return True
-
-    except Exception as e:
-        print("Error initializing sensors:", e)
-        return False
-
-# --- Main Program ---
-
-if init_sensor():
-    if calibrate_gyro():
-        target_period_us = 100000  # Target period: 0.1 seconds (100,000 microseconds)
-        last_read_time = time.ticks_us()
-
-        while True:
-            try:
-                accel_x, accel_y, accel_z = get_accel_data()
-                gyro_x, gyro_y, gyro_z = get_gyro_data()
-
-
-                # --- FIFO Status Check (Important!) ---
-                fifo_status = read_register(lsm6dsox_address, FIFO_STATUS2)
-                if (fifo_status & 0x80):  # Check for FIFO overrun (bit 7)
-                    print("FIFO OVERRUN! Data lost.")
-
-                # --- Precise Timing ---
-                current_time = time.ticks_us()
-                elapsed_time = time.ticks_diff(current_time, last_read_time)
-                
-                # Only print if it has been at least target_period_us
-                if elapsed_time >= target_period_us:
-                    print("Accel: {:.4f} {:.4f} {:.4f}  Gyro: {:.4f} {:.4f} {:.4f}".format(accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z))
-                    last_read_time = current_time #Update the last time we printed
-
-                #Always sleep a little bit to avoid locking up the system.
-                time.sleep_us(100)
-
-            except Exception as e:
-                print("Error in main loop:", e)
-                time.sleep(1)
-    else:
-        print("Calibration failed.  Program will not run.")
+# Check communication with the sensor
+device_id = read_register(WHO_AM_I_REG, 1)
+if device_id is None or len(device_id) == 0 or device_id[0] != 0x6C:
+    print("Failed to communicate with LSM6DSOX. Check connections.")
 else:
-    print("Sensor initialization failed.")
+    print("LSM6DSOX sensor found. WHO_AM_I:", hex(device_id[0]))
+
+    # Initialization
+    write_register(CTRL3_C, 0x44)  # Enable Block Data Update and auto-increment
+    write_register(CTRL1_XL, 0x20)  # Set accelerometer ODR to 26 Hz, 2g
+    write_register(CTRL2_G, 0x20)  # Set gyroscope ODR to 26 Hz, 2000 dps
+    write_register(WAKE_UP_THS, 0x02)
+    write_register(WAKE_UP_DUR, 0x02)
+    write_register(MD1_CFG, 0b00000010)
+    write_register(FIFO_CTRL1, 0x20)  # Set watermark level to 32 (FIFO threshold)
+    write_register(FIFO_CTRL2, 0b00001100)  # Set FIFO mode to continuous mode
+    write_register(FIFO_CTRL3, 0x22)  # Enable FIFO for accelerometer data
+    write_register(FIFO_CTRL4, 0x06)
+    write_register(INT1_CTRL, 0b00000111)
+    write_register(FREE_FALL, 0b00001100)
+
+    print("Waiting for motion...")
+
+    previous_AXL_X = 0
+    previous_AXL_Y = 0
+    previous_AXL_Z = 0
+    threshold_initial = 10000  # Higher initial threshold to reduce false positives
+    threshold_normal = 5000  # Normal threshold for motion detection
+    threshold = threshold_initial
+    debounce_time = 2  # Number of seconds to debounce motion detection
+    last_motion_time = 0
+    stabilization_time = 5  # Time to wait before switching to normal threshold
+    idle_time = 30  # Time to wait before entering idle mode
+    idle_scan_interval = 10  # Idle mode scan interval
+
+    start_time = time.time()
+    stabilized = False
+    idle_mode = False
+
+    while True:
+        if idle_mode:
+            sleep(idle_scan_interval)
+            exit_idle_mode()
+            idle_mode = False
+            start_time = time.time()  # Reset the timer
+            continue
+
+        fifo_level, fifo_full = read_fifo_status()
+        print("fifo_level = " + str(fifo_level))
+        if fifo_level > 0:
+            read_fifo_data(fifo_level)
+            AXL_Data = read_register(OUTX_AXL, 6)
+            if AXL_Data:
+                AXL_X = bytes_to_int16(AXL_Data[1], AXL_Data[0])
+                AXL_Y = bytes_to_int16(AXL_Data[3], AXL_Data[2])
+                AXL_Z = bytes_to_int16(AXL_Data[5], AXL_Data[4])
+                print("AXL data = ", AXL_X, AXL_Y, AXL_Z)
+
+                # Detect motion by comparing current and previous values
+                current_time = time.time()
+                if ((abs(AXL_X - previous_AXL_X) > threshold or
+                     abs(AXL_Y - previous_AXL_Y) > threshold or
+                     abs(AXL_Z - previous_AXL_Z) > threshold) and
+                    (current_time - last_motion_time > debounce_time)):
+                    print("Motion detected!")
+                    last_motion_time = current_time
+
+                # Update previous values
+                previous_AXL_X = AXL_X
+                previous_AXL_Y = AXL_Y
+                previous_AXL_Z = AXL_Z
+
+                # Switch to normal threshold after stabilization time
+                if not stabilized and (current_time - start_time > stabilization_time):
+                    threshold = threshold_normal
+                    stabilized = True
+
+                # Enter idle mode if no motion is detected for idle_time seconds
+                if current_time - last_motion_time > idle_time:
+                    enter_idle_mode()
+                    idle_mode = True
+
+        sleep(1 if not idle_mode else idle_scan_interval)
