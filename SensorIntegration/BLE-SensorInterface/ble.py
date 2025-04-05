@@ -2,12 +2,20 @@ from machine import Timer, Pin
 from bluetooth import BLE
 import ubluetooth
 import struct
+from time import sleep
+import machine
+
 from i2c_peripheral import Adafruit_LSM6DSOX
 i = 0
+NEOI2C_PWR = Pin(2, Pin.OUT)
+NEOI2C_PWR.value(0)
+sleep(0.5)
+NEOI2C_PWR.value(1)
 p = Adafruit_LSM6DSOX(Pin(20), Pin(22), freq = 100000)
 p.begin()
 
 class BLEPeripheral:
+    StartSendingData = 0
     def __init__(self):
         self.name = 'ESP32_BLE_1'
         
@@ -41,7 +49,7 @@ class BLEPeripheral:
         # Calls advertise function to become discoverable
         self.advertise()
         
-        self.loop()
+        #self.loop()
 
         # Counter to test data being sent
 #         self.counter = 0
@@ -97,15 +105,27 @@ class BLEPeripheral:
 
     # Continuously polls for FIFO interrupts and sends data if detected      
     def loop(self):
+        print("Start loop")
         while(1):
             p.interrupt_en()
             if p.fifo_over == 1:
                 print('Fifo status detected')
-                self.send_data()
+                if(self.StartSendingData>0):
+                    self.send_data()
+                    self.StartSendingData -= 1
+                    print("Sending IMU batch",10-self.StartSendingData)
             else:
                 pass
-            
-        
+def switch_callback(pin):
+    global ble_peripheral
+    ble_peripheral.StartSendingData = 10
+    print("Start recording IMU data")
+    sleep(0.2)
+
+m_switch = Pin(38, Pin.IN)				#Initialize Switch38 on ESP32 Feather V2 board            
+m_switch.irq(trigger=machine.Pin.IRQ_FALLING, handler=switch_callback)
+
         
 ble_peripheral = BLEPeripheral()
+ble_peripheral.loop()
 

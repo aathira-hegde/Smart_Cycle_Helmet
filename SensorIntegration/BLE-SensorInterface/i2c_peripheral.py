@@ -1,6 +1,5 @@
 from machine import I2C, Pin
 
-
 # Define register addresses
 LSM6DSOX_ADDR	= 	0x6A
 FIFO_CTRL1 		= 	0x07
