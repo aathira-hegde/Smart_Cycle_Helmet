@@ -2,6 +2,7 @@ import asyncio
 from bleak import BleakClient, BleakScanner
 import struct
 from datetime import datetime
+import csv
 
 # Auto generated UUIDs for service and characteristics (https://www.uuidgenerator.net/)
 # These UUIDs must match what the ESP is advertising
@@ -14,12 +15,10 @@ OUTPUT_FILE_NAME = 'recieved_data.txt'
 
 # Handler for incoming data
 async def recieve_data(device_name, sender, data):
-    with open(OUTPUT_FILE_NAME, 'a') as f:
-        # value = int.from_bytes(data, "little")
-        value = struct.unpack('156h', data)
-        now = datetime.now()
-        f.write(now.strftime("[%H:%M:%S.%f ") + f"{device_name}] Received: {value}\n")
-        #print(f"[{device_name}] Received: {value}")
+    with open(device_name + '_' + OUTPUT_FILE_NAME, 'a', newline='') as f:
+        values = struct.unpack('156h', data)
+        writer = csv.writer(f)
+        writer.writerows([values])
 
 
 # Finds ESP32 in discoverable bluetooth devices
