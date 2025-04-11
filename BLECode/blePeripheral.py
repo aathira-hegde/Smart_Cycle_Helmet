@@ -85,7 +85,7 @@ class BLEPeripheral:
             # Pack as 2 byte signed integers
             # 120h = 120 2-byte signed short, 156h = 156 2-byte signed short
             # MAX THIS CAN BE is 
-            data = struct.pack('156h', *simulate_payload)
+            data = struct.pack('208h', *simulate_payload)
 
             
             # Write the local value for the handle and sends an update to the client
