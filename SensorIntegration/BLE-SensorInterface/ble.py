@@ -4,14 +4,14 @@ import ubluetooth
 import struct
 from time import sleep
 import machine
+import i2c_peripheral
 
-from i2c_peripheral import Adafruit_LSM6DSOX
 i = 0
-NEOI2C_PWR = Pin(2, Pin.OUT)
-NEOI2C_PWR.value(0)
-sleep(0.5)
-NEOI2C_PWR.value(1)
-p = Adafruit_LSM6DSOX(Pin(20), Pin(22), freq = 100000)
+# NEOI2C_PWR = Pin(2, Pin.OUT)
+# NEOI2C_PWR.value(0)
+# sleep(0.5)
+# NEOI2C_PWR.value(1)
+p = i2c_peripheral.Adafruit_LSM6DSOX(Pin(20), Pin(22), freq = 100000)
 p.begin()
 
 class BLEPeripheral:
@@ -24,8 +24,8 @@ class BLEPeripheral:
         self.ble.active(True)
         
         # Sets MTU to 512 Bytes of data to transfer
-        self.ble.config(mtu=512) # 256 if this b
-        self.mtu = 512
+        self.ble.config(mtu=416) # 256 if this b
+        self.mtu = 416
         print('MTU: ', self.ble.config('mtu'))
         
         # Creates a call back function for BLE when an event happens
@@ -93,7 +93,7 @@ class BLEPeripheral:
             # Converts data to hex
             # Pack as 2 byte signed integers
             # 120h = 120 2-byte signed short, 156h = 156 2-byte signed short
-            # MAX THIS CAN BE is 
+            # 208h = 208 2-byte signed short 
             data = struct.pack('208h', *simulate_payload)
 
             

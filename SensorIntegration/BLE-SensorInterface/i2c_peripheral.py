@@ -32,11 +32,6 @@ FIFO_DO_ZH		=	0x7E
 FIFO_TAP_CFG0	=	0x56
 TAP_CFG2		=	0x58
 
-# NEOI2C_PWR = Pin(2, Pin.OUT)
-# NEOI2C_PWR.value(0)
-# sleep(0.5)
-# NEOI2C_PWR.value(1)
-# Currently, using 3.3V Pin to power the sensor
 
 # Set the fifo_threshold interrupt
 int1_cfg		=	const(0b00001000)
@@ -85,8 +80,8 @@ class Adafruit_LSM6DSOX:
     def load_settings(self):
         
         # Register watermark threshold for the depth of FIFO
-        # FIFO buffer threshold is set to 54 * (1 byte tag + 6 bytes data)
-        self.write_8(FIFO_CTRL1, 0x36)
+        # FIFO buffer threshold is set to 52 * (1 byte tag + 6 bytes data)
+        self.write_8(FIFO_CTRL1, 0x34)
         
         # Limit the FIFO depth to threshold - 8th bit is high
         self.write_8(FIFO_CTRL2, 0x80)
@@ -94,8 +89,8 @@ class Adafruit_LSM6DSOX:
         # Register the batch data rate (26Hz) for the gyro and accelerometer
         self.write_8(FIFO_CTRL3, 0x22)
         
-        # Register FIFO fill mode to continuous mode and time stamp decimation - odr/32
-        self.write_8(FIFO_CTRL4, 0xA6)
+        # Register FIFO fill mode to continuous mode and time stamp decimation is disabled
+        self.write_8(FIFO_CTRL4, 0x06)
 
         # Register output data rate (26Hz) and full scale (+/-16g) for accelerometer 
         self.write_8(CTRL1_XL, 0b00100100)
@@ -149,4 +144,6 @@ class Adafruit_LSM6DSOX:
                 self.data = self.data + a
                 i += 1
             self.fifo_over = 1
+            
+            
             
