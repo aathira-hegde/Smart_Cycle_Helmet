@@ -3,6 +3,7 @@ from bleak import BleakClient, BleakScanner
 import struct
 import csv
 
+
 # Auto generated UUIDs for service and characteristics (https://www.uuidgenerator.net/)
 # These UUIDs must match what the ESP is advertising
 ESP32_DEVICES = [
@@ -10,12 +11,12 @@ ESP32_DEVICES = [
     {"name": "ESP32_BLE_2", "service_uuid": "9cc5181a-3d5c-4e1b-b403-64972f680794", "char_uuid": "4e49e101-2044-458f-83e6-f35250d33740"}]
 
 # Determines the file where the data is stored
-OUTPUT_FILE_NAME = 'recieved_data.txt' 
+OUTPUT_FILE_NAME = 'received_data.csv' 
 
 # Handler for incoming data
 async def recieve_data(device_name, sender, data):
     with open(device_name + '_' + OUTPUT_FILE_NAME, 'a', newline='') as f:
-        values = struct.unpack('156h', data)
+        values = struct.unpack('209h', data)
         writer = csv.writer(f)
         writer.writerows([values])
 
@@ -71,7 +72,7 @@ async def start_BLE(device):
 # Gets ESP32 devices and runs BLE connection tasks for both
 async def main():
     device_1, device_2 = ESP32_DEVICES
-    await asyncio.gather(start_BLE(device_1), start_BLE(device_2))
+    await asyncio.gather(start_BLE(device_1))
 
 
 # Runs the main function as async

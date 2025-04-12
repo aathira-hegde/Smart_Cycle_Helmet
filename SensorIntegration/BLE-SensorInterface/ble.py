@@ -5,6 +5,7 @@ import struct
 from time import sleep
 import machine
 import i2c_peripheral
+import time
 
 i = 0
 # NEOI2C_PWR = Pin(2, Pin.OUT)
@@ -24,8 +25,8 @@ class BLEPeripheral:
         self.ble.active(True)
         
         # Sets MTU to 512 Bytes of data to transfer
-        self.ble.config(mtu=416) # 256 if this b
-        self.mtu = 416
+        self.ble.config(mtu=512) # 256 if this b
+        self.mtu = 512
         print('MTU: ', self.ble.config('mtu'))
         
         # Creates a call back function for BLE when an event happens
@@ -85,21 +86,21 @@ class BLEPeripheral:
 
     # Sends data to a connected device
     def send_data(self):
+        global dataCounter
         if self.connected:
                 
             # Sending IMU data              
             simulate_payload = p.data
-            
+            full_payload = [dataCounter] + list(simulate_payload)
             # Converts data to hex
             # Pack as 2 byte signed integers
             # 120h = 120 2-byte signed short, 156h = 156 2-byte signed short
             # 208h = 208 2-byte signed short 
-            data = struct.pack('208h', *simulate_payload)
+            data = struct.pack('209h', *full_payload)
 
             
             # Write the local value for the handle and sends an update to the client
             self.ble.gatts_write(self.imu_handle, data, True)
-            print(f"Sent data")
         else:
             print("No device connected")
 
@@ -117,12 +118,30 @@ class BLEPeripheral:
             else:
                 pass
 def switch_callback(pin):
-    global ble_peripheral
-    ble_peripheral.StartSendingData = 10
-    print("Start recording IMU data")
-    sleep(0.2)
+    global last_press_time
+    global debounce_time
+    current_time = time.ticks_ms()
+    if time.ticks_diff(current_time, last_press_time) > debounce_time:
+        m_debounce_timer.init(period=debounce_time, mode=machine.Timer.ONE_SHOT, callback=debounce_timer_callback)
 
-m_switch = Pin(38, Pin.IN)				#Initialize Switch38 on ESP32 Feather V2 board            
+def debounce_timer_callback(timer):
+    global last_press_time
+    global m_switch
+    global ble_peripheral
+    global dataCounter
+    if m_switch.value() == 0:  # Check if switch is still pressed
+        last_press_time = time.ticks_ms()
+        if(ble_peripheral.StartSendingData == 0):
+            ble_peripheral.StartSendingData = 10
+            print("Start recording IMU data")
+            dataCounter += 1
+        sleep(0.1)
+
+dataCounter = 0
+debounce_time = 50
+last_press_time = 0
+m_debounce_timer = machine.Timer(3)		#Use HW timer 3 for switch debounce
+m_switch = Pin(4, Pin.IN, Pin.PULL_UP)				#Initialize Switch38 on ESP32 Feather V2 board            
 m_switch.irq(trigger=machine.Pin.IRQ_FALLING, handler=switch_callback)
 
         
