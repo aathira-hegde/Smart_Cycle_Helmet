@@ -37,6 +37,8 @@ dependencies:
   flutter_blue_plus: ^1.35.3
   fl_chart: ^0.70.2
 
+  #This should add the phone number capability
+  url_launcher: ^6.2.5
 dev_dependencies:
   flutter_test:
     sdk: flutter

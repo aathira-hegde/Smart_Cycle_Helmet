@@ -1,7 +1,6 @@
 import asyncio
 from bleak import BleakClient, BleakScanner
 import struct
-from datetime import datetime
 import csv
 
 # Auto generated UUIDs for service and characteristics (https://www.uuidgenerator.net/)
@@ -72,7 +71,7 @@ async def start_BLE(device):
 # Gets ESP32 devices and runs BLE connection tasks for both
 async def main():
     device_1, device_2 = ESP32_DEVICES
-    await asyncio.gather(start_BLE(device_1))
+    await asyncio.gather(start_BLE(device_1), start_BLE(device_2))
 
 
 # Runs the main function as async

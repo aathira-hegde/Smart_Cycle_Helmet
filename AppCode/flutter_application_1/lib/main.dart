@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:math';
+import 'package:url_launcher/url_launcher.dart';
 
 void main() {
   runApp(const MyApp());
@@ -46,7 +47,7 @@ class _MyHomePageState extends State<MyHomePage> {
   void _startMockSensorData() {
     _sensorTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       setState(() {
-        _acceleration = Random().nextDouble() * 10; //note, this is fake data
+        _acceleration = Random().nextDouble() * 10;
         if (_acceleration > 7.0) {
           _startAlertCountdown();
         }
@@ -75,6 +76,19 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void _sendEmergencyAlert() {
     print("Emergency alert sent to family members!");
+    _makePhoneCall('3179910554'); //my phone number as of now
+  }
+
+  Future<void> _makePhoneCall(String phoneNumber) async {
+    final Uri launchUri = Uri(
+      scheme: 'tel',
+      path: phoneNumber,
+    );
+    if (await canLaunchUrl(launchUri)) {
+      await launchUrl(launchUri);
+    } else {
+      print("Could not launch \$phoneNumber");
+    }
   }
 
   void _cancelAlert() {
@@ -104,10 +118,15 @@ class _MyHomePageState extends State<MyHomePage> {
           children: <Widget>[
             const Text('Real-Time IMU Sensor Data:'),
             Text(
-              'Acceleration: ${_acceleration.toStringAsFixed(2)} m/s²',
+              'Acceleration: \${_acceleration.toStringAsFixed(2)} m/s²',
               style: Theme.of(context).textTheme.headlineMedium,
             ),
             const SizedBox(height: 30),
+
+            ElevatedButton(
+            onPressed: () => _makePhoneCall('1234567890'), // Replace with real number
+            child: const Text('Test Emergency Call'),
+          ),
             if (_alertActive)
               Column(
                 children: [
@@ -129,9 +148,9 @@ class _MyHomePageState extends State<MyHomePage> {
                         ),
                       ),
                       Text(
-                        '$_countdown',
+                        '\$_countdown',
                         style: const TextStyle(
-                          fontSize: 48,
+                          fontSize: 36,
                           fontWeight: FontWeight.bold,
                           color: Colors.red,
                         ),
