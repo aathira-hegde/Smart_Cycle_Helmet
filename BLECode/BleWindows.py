@@ -7,17 +7,29 @@ import csv
 # Auto generated UUIDs for service and characteristics (https://www.uuidgenerator.net/)
 # These UUIDs must match what the ESP is advertising
 ESP32_DEVICES = [
-    {"name": "ESP32_BLE_1", "service_uuid": "5b6ad9a0-7e66-43c7-b4f8-b9d0c734393d", "char_uuid": "ee1247d7-6ac4-4bf6-b0b3-1828d127823c"},
+    {"name": "Smart Cycle Helmet", "service_uuid": "5b6ad9a0-7e66-43c7-b4f8-b9d0c734393d", "char_uuid": "ee1247d7-6ac4-4bf6-b0b3-1828d127823c"},
     {"name": "ESP32_BLE_2", "service_uuid": "9cc5181a-3d5c-4e1b-b403-64972f680794", "char_uuid": "4e49e101-2044-458f-83e6-f35250d33740"}]
 
 # Determines the file where the data is stored
 OUTPUT_FILE_NAME = 'received_data.csv' 
-
+LastBatch = 0
+receivedCounter = 0
 # Handler for incoming data
 async def recieve_data(device_name, sender, data):
+    print(" Verdict = ",data.decode('utf-8'))
+    return
     with open(device_name + '_' + OUTPUT_FILE_NAME, 'a', newline='') as f:
         values = struct.unpack('209h', data)
         writer = csv.writer(f)
+        global LastBatch
+        global receivedCounter
+        if(LastBatch != values[0]):
+            print("Receiving Batch = ",values[0])
+            receivedCounter = 0
+            LastBatch = values[0]
+        receivedCounter += 1
+        if(receivedCounter >= 5):
+            print("Received all packets")
         writer.writerows([values])
 
 
