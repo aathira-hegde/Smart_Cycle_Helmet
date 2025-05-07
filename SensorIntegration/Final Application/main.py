@@ -1,4 +1,4 @@
-from machine import I2C, Pin, lightsleep
+from machine import I2C, Pin, deepsleep
 import machine
 import time, esp32
 from time import sleep
@@ -265,7 +265,7 @@ def initialize_IMU():
         else:
             print(f"Going to sleep at {time.ticks_ms()}")
             print(f"Sleep")
-            lightsleep()
+            deepsleep()
 
 NEOI2C_PWR = Pin(2, Pin.OUT)
 NEOI2C_PWR.value(0)
